@@ -1,0 +1,24 @@
+services:
+  gitasphere:
+    build: .
+    image: gitasphere:gradio
+    ports:
+      - "7860:7860"
+    environment:
+      RAG_FAISS_PATH: /app/gita_knowledge_base.faiss
+      RAG_DOCS_PATH: /app/gita_documents.pkl
+      GGUF_PATH: /models/gita-model-q4_K_M.gguf
+      LLAMA_THREADS: "8"
+      LLAMA_CTX: "4096"
+      LLAMA_BATCH: "256"
+      LLAMA_TEMP: "0.6"
+      LLAMA_TOP_P: "0.8"
+      LLAMA_MIROSTAT: "0"
+      RAG_INITIAL_K: "12"
+      RERANK_TOP: "12"
+      RAG_RETURN_K: "5"
+    volumes:
+      - ./gita_knowledge_base.faiss:/app/gita_knowledge_base.faiss:ro
+      - ./gita_documents.pkl:/app/gita_documents.pkl:ro
+      - ./checkpoints/gita-model-q4_K_M.gguf:/models/gita-model-q4_K_M.gguf:ro
+
