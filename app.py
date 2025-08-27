@@ -270,4 +270,4 @@ with gr.Blocks(title="GitaSphere AI", theme=gr.themes.Soft()) as demo:
     clear_btn.click(fn=clear_chat, inputs=[], outputs=[chatbot, elapsed])
 
 if __name__ == "__main__":
-    demo.queue().launch(server_name="0.0.0.0",share=True, server_port=int(os.environ.get("PORT", "7860")))
+    demo.queue().launch(server_name="0.0.0.0",share=True, server_port=int(os.environ.get("PORT", "8080")))
