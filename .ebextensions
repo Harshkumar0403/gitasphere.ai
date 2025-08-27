@@ -1,0 +1,11 @@
+packages:
+  yum:
+    cmake: []
+    gcc-c++: []
+
+container_commands:
+  01_install_llama_cpp:
+    command: "pip install --no-cache-dir llama-cpp-python"
+    env:
+      CMAKE_ARGS: "-DLLAMA_CUBLAS=OFF"
+      FORCE_CMAKE: "1"
