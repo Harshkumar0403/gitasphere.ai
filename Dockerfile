@@ -29,7 +29,7 @@ RUN pip install llama-cpp-python
 COPY app.py .
 
 # Expose the port that Gradio will run on
-EXPOSE 7860
+EXPOSE 8080
 
 # The command to run your Gradio app when the container starts
 # The app will download the large files from the Hub on its own
