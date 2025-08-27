@@ -23,7 +23,8 @@ ENV FORCE_CMAKE=1
 
 # Install all Python dependencies from the requirements file in a single step
 RUN pip install --no-cache-dir -r requirements.txt
-
+--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+RUN pip install llama-cpp-python
 # Copy ONLY your application code
 COPY app.py .
 
