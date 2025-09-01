@@ -41,15 +41,14 @@ Technology Stack:
 Category
 	
 * *Technologies*
-- AI / ML
-- Llama-3 (Quantized GGUF), llama-cpp-python, Sentence Transformers, FAISS, RAG
+	* AI / ML
+	* Llama-3 (Quantized GGUF), llama-cpp-python, Sentence Transformers, FAISS, RAG
 * *Backend*
 
-- Python, Gradio, FastAPI
+	* Python, Gradio, FastAPI
 
 * *Deployment*
-* 
--Docker, AWS EC2 (m7i-flex.large), Nginx (Reverse Proxy), DDNS (No-IP)
+	* Docker, AWS EC2 (m7i-flex.large), Nginx (Reverse Proxy), DDNS (No-IP)
 
 Models on Hub
 	
@@ -99,8 +98,6 @@ Installation & Run
 
 This project is licensed under the Apache 2.0 License. See the LICENSE file for more details.
 
-<div align="center">
-<em>Made with ❤️ and a passion for ancient wisdom.</em>
-</div>
+
 
 Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
