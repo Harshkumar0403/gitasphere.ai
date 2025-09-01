@@ -1,22 +1,7 @@
-<div align="center">
-<img src="https://www.google.com/search?q=https://i.imgur.com/S8o2m1Q.png" alt="GitaSphere AI Banner" width="800"/>
-<br/>
-<h1>GitaSphere AI</h1>
-<strong>Your Personal Guide to the Wisdom of the Bhagavad Gītā</strong>
-<br/>
-<br/>
-<a href="https://www.google.com/search?q=http://gitasphere.ddns.net:7860">
-<img src="https://www.google.com/search?q=https://img.shields.io/badge/Live%2520Demo-Click%2520Here-brightgreen%3Fstyle%3Dfor-the-badge%26logo%3Drocket" alt="Live Demo">
-</a>
-&nbsp;
-<a href="#">
-<img src="https://www.google.com/search?q=https://img.shields.io/badge/Python-3.11-blue%3Fstyle%3Dfor-the-badge%26logo%3Dpython" alt="Python Version">
-</a>
-&nbsp;
-<a href="#">
-<img src="https://www.google.com/search?q=https://img.shields.io/badge/License-Apache%25202.0-red%3Fstyle%3Dfor-the-badge" alt="License">
-</a>
-</div>
+
+# GitaSphere AI
+*Your Personal Guide to the Wisdom of the Bhagavad Gītā*
+
 
 GitaSphere AI is a sophisticated, end-to-end AI application designed to make the profound teachings of the Bhagavad Gītā accessible to everyone. Whether you're a curious student or a dedicated scholar, GitaSphere provides instant translations and deep, structured interpretations of any verse, tailored to your level of understanding.
 
