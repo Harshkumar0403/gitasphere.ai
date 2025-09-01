@@ -40,27 +40,19 @@ Technology Stack:
 
 Category
 	
+* *Technologies*
+- AI / ML
+- Llama-3 (Quantized GGUF), llama-cpp-python, Sentence Transformers, FAISS, RAG
+* *Backend*
 
-Technologies
+- Python, Gradio, FastAPI
 
-AI / ML
-	
-
-Llama-3 (Quantized GGUF), llama-cpp-python, Sentence Transformers, FAISS, RAG
-
-Backend
-	
-
-Python, Gradio, FastAPI
-
-Deployment
-	
-
-Docker, AWS EC2 (m7i-flex.large), Nginx (Reverse Proxy), DDNS (No-IP)
+* *Deployment*
+* 
+-Docker, AWS EC2 (m7i-flex.large), Nginx (Reverse Proxy), DDNS (No-IP)
 
 Models on Hub
 	
-
 LLM Model, Knowledge Base
 ⚙️ How It Works
 
