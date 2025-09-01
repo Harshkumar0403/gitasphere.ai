@@ -1,38 +1,40 @@
-# app.py — Gradio UI for GitaSphere (CPU/GPU, transformers + FAISS RAG)
+# app.py — Gradio UI for GitaSphere (CPU-friendly, llama.cpp + FAISS RAG)
 import os, time, re, logging, pickle, asyncio, inspect
 from typing import List, Dict, Optional
-from threading import Thread # --- NEW ---
 
 import numpy as np
 import faiss
 import gradio as gr
-import torch # --- NEW ---
 from sentence_transformers import SentenceTransformer, CrossEncoder
 from huggingface_hub import hf_hub_download
-# from llama_cpp import Llama # --- REMOVED ---
-from transformers import pipeline, AutoTokenizer, TextIteratorStreamer # --- NEW ---
+from llama_cpp import Llama
 from googletrans import Translator
 
 # =========================
 # Config via environment
 # =========================
-# --- NEW: Point to a standard transformers model repository ---
-MODEL_REPO_ID = os.getenv("MODEL_REPO_ID", "Harsh0304/llama-3.2-3b-gita-sft")
-KB_REPO_ID = os.getenv("KB_REPO_ID", "Harsh0304/gitasphere-ai-knowledge-base")
+# --- NEW: Point to Hub Repositories for all large files ---
+GGUF_REPO_ID = os.getenv("GGUF_REPO_ID", "Harsh0304/gitasphere-llama3-gguf")
+GGUF_FILENAME = os.getenv("GGUF_FILENAME", "gita-model-q4_K_M.gguf")
+KB_REPO_ID = os.getenv("KB_REPO_ID", "Harsh0304/gitasphere-ai-knowledge-base") # <-- YOUR KNOWLEDGE BASE REPO
 
 EMBED_MODEL_NAME = os.environ.get("EMBED_MODEL", "sentence-transformers/all-mpnet-base-v2")
 RERANK_MODEL     = os.environ.get("RERANK_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
 
-# --- RAG params are unchanged ---
+# Reasonable CPU fanout
 INITIAL_K  = int(os.environ.get("RAG_INITIAL_K", "20"))
-RERANK_TOP = int(os.environ.get("RERANK_TOP",    "20"))
+RERANK_TOP = int(os.environ.get("RERANK_TOP",   "20"))
 RETURN_K   = int(os.environ.get("RAG_RETURN_K", "5"))
 
-# --- MODIFIED: Generation params for transformers ---
-DEVICE       = os.environ.get("DEVICE", "cpu") # "cpu" or "cuda"
-TORCH_DTYPE  = torch.bfloat16 if DEVICE == "cuda" and torch.cuda.is_bf16_supported() else "auto"
+# llama.cpp generation params (CPU-tuned)
+N_THREADS    = int(os.environ.get("LLAMA_THREADS", str(os.cpu_count() or 4)))
+N_CTX        = int(os.environ.get("LLAMA_CTX", "4096"))
+N_BATCH      = int(os.environ.get("LLAMA_BATCH", "256"))
 TEMPERATURE  = float(os.environ.get("LLAMA_TEMP", "0.6"))
 TOP_P        = float(os.environ.get("LLAMA_TOP_P", "0.8"))
+MIROSTAT     = int(os.environ.get("LLAMA_MIROSTAT", "0"))
+MIROSTAT_TAU = float(os.environ.get("LLAMA_MIROSTAT_TAU", "5.0"))
+MIROSTAT_ETA = float(os.environ.get("LLAMA_MIROSTAT_ETA", "0.1"))
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("gitasphere-app")
@@ -44,18 +46,25 @@ index: Optional[faiss.Index] = None
 documents: List[Dict] = []
 embedder: Optional[SentenceTransformer] = None
 reranker: Optional[CrossEncoder] = None
+llm: Optional[Llama] = None
 translator: Optional[Translator] = None
 SYSTEM_MSG: Optional[str] = None
 
-# --- MODIFIED: Globals for transformers model ---
-llm_pipeline: Optional[pipeline] = None
-tokenizer: Optional[AutoTokenizer] = None
-streamer: Optional[TextIteratorStreamer] = None
-
 # =========================
-# Utilities (largely unchanged)
+# Utilities
 # =========================
 DEVANAGARI_RE = re.compile(r'[\u0900-\u097F]')
+
+# --- NEW: Set of greetings to check for ---
+GREETINGS = {"hi", "hii", "hello", "hey", "heya", "howdy", "who are you", "what are you", "what can you do", "what is this"}
+INTRO_MESSAGE = "Hello! I am GitaSphere AI, your personal guide to the Bhagavad Gītā. Please ask me any question about the Gītā, or paste a Sanskrit or English verse for a detailed explanation. How can I assist you?"
+
+def is_intro_query(text: str) -> bool:
+    """Check if the input is a simple greeting or introductory question."""
+    # Normalize the text: lowercase, remove punctuation, and strip whitespace
+    normalized_text = re.sub(r'[^\w\s]', '', text).lower().strip()
+    return normalized_text in GREETINGS
+# --- End of new code ---
 
 def is_sanskrit(text: str) -> bool:
     if not text: return False
@@ -171,30 +180,20 @@ def build_prompt(query_en: str, persona: str, chunks: List[Dict], history_pairs:
     messages.append({"role": "user", "content": user_prompt})
     return messages
 
-# --- MODIFIED: Replaced run_llama_stream with a new function for transformers ---
-def run_model_stream(messages: List[Dict], max_tokens: int):
-    """Uses a threaded pipeline to stream tokens."""
-    generation_kwargs = dict(
-        max_new_tokens=max_tokens,
-        temperature=TEMPERATURE,
-        top_p=TOP_P,
-        do_sample=True,
-        eos_token_id=tokenizer.eos_token_id,
-        streamer=streamer
-    )
-    # The pipeline call must be run in a thread so we can iterate on the streamer
-    thread = Thread(target=llm_pipeline, args=(messages,), kwargs=generation_kwargs)
-    thread.start()
-    # Yield the tokens as they become available
-    for new_text in streamer:
-        yield new_text
+def run_llama_stream(messages: List[Dict], max_tokens: int):
+    kwargs = dict(messages=messages, temperature=TEMPERATURE, top_p=TOP_P, max_tokens=max_tokens, stop=["</s>", "<|eot_id|>"], stream=True)
+    if MIROSTAT in (1, 2):
+        kwargs.update({"mirostat": MIROSTAT, "mirostat_tau": MIROSTAT_TAU, "mirostat_eta": MIROSTAT_ETA})
+    for chunk in llm.create_chat_completion(**kwargs):
+        delta = chunk["choices"][0].get("delta", {})
+        if "content" in delta:
+            yield delta["content"]
 
 # =========================
 # One-time startup
 # =========================
 def _startup_once():
-    global index, documents, embedder, reranker, translator, SYSTEM_MSG
-    global llm_pipeline, tokenizer, streamer # --- MODIFIED ---
+    global index, documents, embedder, reranker, llm, translator, SYSTEM_MSG
     
     log.info("Loading FAISS & docs from Hub…")
     idx, docs = load_kb_from_hub()
@@ -205,20 +204,11 @@ def _startup_once():
     globals()["embedder"] = SentenceTransformer(EMBED_MODEL_NAME, device="cpu")
     log.info(f"Loading reranker… {RERANK_MODEL}")
     globals()["reranker"] = CrossEncoder(RERANK_MODEL, device="cpu")
-
-    # --- MODIFIED: Load transformers pipeline instead of llama.cpp ---
-    log.info(f"Loading transformers model from Hub: {MODEL_REPO_ID}")
-    globals()["tokenizer"] = AutoTokenizer.from_pretrained(MODEL_REPO_ID)
-    globals()["llm_pipeline"] = pipeline(
-        "text-generation",
-        model=MODEL_REPO_ID,
-        tokenizer=tokenizer,
-        device=DEVICE,
-        torch_dtype=TORCH_DTYPE
-    )
-    globals()["streamer"] = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
-    log.info(f"Model loaded on device: {DEVICE} with dtype: {TORCH_DTYPE}")
-    
+    log.info(f"Downloading llama.cpp model from Hub: {GGUF_REPO_ID}")
+    model_path = hf_hub_download(repo_id=GGUF_REPO_ID, filename=GGUF_FILENAME)
+    log.info(f"Loading llama.cpp from downloaded path: {model_path}")
+    os.environ.setdefault("GGML_N_THREADS", str(N_THREADS))
+    globals()["llm"] = Llama(model_path=model_path, n_ctx=N_CTX, n_threads=N_THREADS, n_batch=N_BATCH, embedding=False, verbose=False)
     log.info("Loading Google Translator client…")
     globals()["translator"] = Translator(service_urls=["translate.googleapis.com"])
     globals()["SYSTEM_MSG"] = build_system_message()
@@ -240,41 +230,43 @@ def messages_to_pairs(chat_messages: List[Dict]) -> List:
             curr_user = None
     return pairs
 
+# --- MODIFIED: The main response function ---
 def respond(user_msg, persona, max_tokens, chat_history):
     t0 = time.time()
     user_msg = (user_msg or "").strip()
     if not user_msg:
         yield chat_history, ""
         return
-    
-    # We now use Gradio's native message dict format
-    chat_history = (chat_history or []) + [{"role": "user", "content": user_msg}]
 
+    # --- NEW: Handle greetings and introductory questions to prevent hallucination ---
+    if is_intro_query(user_msg):
+        chat_history = (chat_history or []) + [
+            {"role": "user", "content": user_msg},
+            {"role": "assistant", "content": INTRO_MESSAGE}
+        ]
+        yield chat_history, f"{time.time() - t0:.2f}s"
+        return
+    # --- End of new code ---
+
+    chat_history = (chat_history or []) + [{"role": "user", "content": user_msg}]
     translation = translate_to_en(user_msg) if is_sanskrit(user_msg) else None
     query_en = translation or user_msg
     chunks = rag_search(query_en)
-    
-    # --- MODIFIED: Get history from Gradio's dict format ---
-    history_pairs = messages_to_pairs(chat_history[:-1]) # Exclude the current user message
+    history_pairs = messages_to_pairs(chat_history)
     messages = build_prompt(query_en, persona, chunks, history_pairs)
-
     refs_lines = [f"- **[{i}]** {build_short_tag(c['doc']['metadata'])} — `{c['doc']['metadata'].get('source_file') or 'doc'}`" for i, c in enumerate(chunks, start=1)]
     citations_md = "\n".join(refs_lines) if refs_lines else "_No context found._"
     header = f"**Translation:** *{translation}*\n\n---\n" if translation else ""
-    
     assistant_accum = ""
     chat_history.append({"role": "assistant", "content": header})
     yield chat_history, f"⌛ Generating…"
-    
-    # --- MODIFIED: Loop over the new streaming function ---
-    for tok in run_model_stream(messages, max_tokens):
+    for tok in run_llama_stream(messages, max_tokens):
         assistant_accum += tok
         chat_history[-1]["content"] = header + assistant_accum
         yield chat_history, f"{time.time() - t0:.2f}s"
-        
-    final_response = (header + assistant_accum + "\n\n---\n### References\n" + citations_md + f"\n\n*Response generated in {time.time() - t0:.2f}s.*")
-    chat_history[-1]["content"] = final_response
+    chat_history[-1]["content"] = (header + assistant_accum + "\n\n---\n### References\n" + citations_md + f"\n\n*Response generated in {time.time() - t0:.2f}s.*")
     yield chat_history, f"{time.time() - t0:.2f}s"
+# --- End of modification ---
 
 def clear_chat():
     return [], ""
@@ -283,29 +275,20 @@ def clear_chat():
 # Gradio UI (no ChatInterface)
 # =========================
 with gr.Blocks(title="GitaSphere AI", theme=gr.themes.Soft()) as demo:
-    gr.Markdown("## 🕉️ GitaSphere AI\nAsk questions or paste verses from the Bhagavad Gītā. The AI will use a knowledge base of classical commentaries to provide a structured answer.")
+    gr.Markdown("## 🕉️ GitaSphere AI\n...")
     with gr.Row():
         with gr.Column(scale=1, min_width=250):
             persona = gr.Dropdown(choices=["school", "masters", "phd", "bhakta"], value="masters", label="Persona / Depth")
-            max_tokens = gr.Slider(minimum=256, maximum=2048, value=768, step=64, label="Max Response Length") # Increased max
+            max_tokens = gr.Slider(minimum=128, maximum=1024, value=512, step=32, label="Max Response Length")
             clear_btn = gr.Button("🧹 Clear History")
         with gr.Column(scale=3):
-            # --- MODIFIED: Use Gradio's native message format for chatbot ---
-            chatbot = gr.Chatbot(label="GitaSphere Conversation", show_label=False, height=600, render=False)
-            gr.ChatInterface(
-                fn=respond,
-                chatbot=chatbot,
-                additional_inputs=[persona, max_tokens],
-                textbox=gr.Textbox(placeholder="Paste a verse or ask a question…", container=False, scale=7),
-                submit_btn="✨ Ask GitaSphere",
-                clear_btn=None, # Disable default clear, we have our own
-            )
-    
-    # The ChatInterface handles the event logic, so manual .click is not needed
-    # We connect our custom clear button to the chatbot and the textbox (which is part of ChatInterface)
-    clear_btn.click(lambda: ([], ""), outputs=[chatbot, chatbot.parent.parent.children[0]])
-
+            chatbot = gr.Chatbot(label="GitaSphere Conversation", show_label=False, height=600, type="messages")
+            user_box = gr.Textbox(placeholder="Paste a verse or ask a question…", lines=4, label="Your message")
+            submit_btn = gr.Button("✨ Ask GitaSphere", variant="primary")
+    elapsed = gr.Label(label="Elapsed", value="")
+    submit_btn.click(fn=respond, inputs=[user_box, persona, max_tokens, chatbot], outputs=[chatbot, elapsed], queue=True)
+    user_box.submit(fn=respond, inputs=[user_box, persona, max_tokens, chatbot], outputs=[chatbot, elapsed], queue=True)
+    clear_btn.click(fn=clear_chat, inputs=[], outputs=[chatbot, elapsed])
 
 if __name__ == "__main__":
-    # Note: `share=True` creates a public link. Be mindful of this.
-    demo.queue().launch(server_name="0.0.0.0", share=True, server_port=int(os.environ.get("PORT", "8080")))
+    demo.queue().launch(server_name="0.0.0.0",share=True, server_port=int(os.environ.get("PORT", "7860")))
