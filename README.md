@@ -1,6 +1,7 @@
 
 # GitaSphere AI
 *Your Personal Guide to the Wisdom of the Bhagavad Gītā*
+visit http://gitasphere.ddns.net/
 
 
 GitaSphere AI is a sophisticated, end-to-end AI application designed to make the profound teachings of the Bhagavad Gītā accessible to everyone. Whether you're a curious student or a dedicated scholar, GitaSphere provides instant translations and deep, structured interpretations of any verse, tailored to your level of understanding.
