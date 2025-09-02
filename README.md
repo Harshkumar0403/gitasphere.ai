@@ -9,23 +9,23 @@ GitaSphere AI is a sophisticated, end-to-end AI application designed to make the
 This project leverages a modern, multi-stage RAG (Retrieval-Augmented Generation) pipeline, powered by a fine-tuned, quantized Llama 3 model, to deliver accurate, context-aware, and citable answers, all while running efficiently on CPU infrastructure.
 ✨ Key Features
 
-    Instant Sanskrit Translation: Automatically translates Devanagari script verses into English.
+* Instant Sanskrit Translation: Automatically translates Devanagari script verses into English.
 
-    Structured Four-Part Analysis: Every answer is broken down into:
+* Structured Four-Part Analysis: Every answer is broken down into:
 
-        Importance: Why the verse is significant.
+  	* Importance: Why the verse is significant.
 
-        Philosophical Interpretation: The core philosophical meaning.
+     * Philosophical Interpretation: The core philosophical meaning.
 
-        Modern Relevance: How the teaching applies to today's world.
+  	 * Modern Relevance: How the teaching applies to today's world.
 
-        Practical Implementation: Actionable steps to apply the wisdom in your life.
+	 * Practical Implementation: Actionable steps to apply the wisdom in your life.
 
-    Multi-Persona Depth: Adjust the complexity of the explanation by choosing one of four personas: school, masters, phD, or bhakta.
+* Multi-Persona Depth: Adjust the complexity of the explanation by choosing one of four personas: school, masters, phD, or bhakta.
 
-    RAG for Accuracy: Utilizes a FAISS vector database of over 7,400 text chunks from authentic commentaries to ground the AI's responses and provide citable references, drastically reducing hallucinations.
+* RAG for Accuracy: Utilizes a FAISS vector database of over 7,400 text chunks from authentic commentaries to ground the AI's responses and provide citable references, drastically reducing hallucinations.
 
-    Efficient & Deployed: Fully containerized with Docker and deployed on AWS EC2, the application is highly efficient, with an average response time of under 50 seconds on CPU.
+* Efficient & Deployed: Fully containerized with Docker and deployed on AWS EC2, the application is highly efficient, with an average response time of under 50 seconds on CPU.
 
 🚀 Live Application in Action
 
@@ -56,7 +56,8 @@ Models on Hub
 LLM Model, Knowledge Base
 ⚙️ How It Works
 
-    Input & Translation: The Gradio interface captures the user's query. If the input is detected as Sanskrit, it is first translated into English using the googletrans library.
+  ```
+  Input & Translation: The Gradio interface captures the user's query. If the input is detected as Sanskrit, it is first translated into English using the googletrans library.
 
     Retrieval: The English query is encoded into a vector embedding. This vector is used to perform a similarity search against a pre-built FAISS index containing over 7,400 chunks from various Gītā commentaries.
 
@@ -65,6 +66,7 @@ LLM Model, Knowledge Base
     Augmentation & Generation: The top-ranked, relevant text chunks are combined with the user's query and a carefully crafted system prompt (which includes the selected persona) and fed to the quantized Llama-3 model via llama-cpp-python.
 
     Output: The model generates a structured, four-part response, citing the retrieved context, which is then streamed back to the user interface.
+```
 
 📦 Getting Started & Local Setup
 
